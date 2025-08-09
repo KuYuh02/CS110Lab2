@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mdeg011 CS110  Lab2: NY Times Popular Articles</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .controls {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        select, button {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+            color: #666;
+        }
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .articles-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .article {
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .article:hover {
+            transform: translateY(-5px);
+        }
+        .article-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .article-content {
+            padding: 15px;
+        }
+        .article-title {
+            font-size: 1.2rem;
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .article-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .article-title a:hover {
+            text-decoration: underline;
+        }
+        .article-abstract {
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        .article-date {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>NY Times Popular Articles</h1>
+    
+    <div class="controls">
+        <div class="control-group">
+            <label for="criteria">Popularity Criteria:</label>
+            <select id="criteria">
+                <option value="viewed">Most Viewed</option>
+                <option value="shared">Most Shared</option>
+                <option value="emailed">Most Emailed</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label for="timeframe">Time Period:</label>
+            <select id="timeframe">
+                <option value="1">Today</option>
+                <option value="7" selected>This Week</option>
+                <option value="30">This Month</option>
+            </select>
+        </div>
+        
+        <button id="fetch-btn">Fetch Articles</button>
+    </div>
+    
+    <div id="status"></div>
+    <div id="articles-container" class="articles-container"></div>
+    
+    <footer>
+        <p>Lab2: JavaScript - NY Times Popular Articles API</p>
+    </footer>
+
+    <script>
+        // API configuration
+        const API_BASE_URL = 'https://api.nytimes.com/svc/mostpopular/v2';
+        // IMPORTANT: Replace with your actual NY Times API key
+        const API_KEY = 'X9AGv63DiXMWfsal3awfvUwzfKJUHvG0';
+
+        // DOM elements
+        const criteriaSelect = document.getElementById('criteria');
+        const timeframeSelect = document.getElementById('timeframe');
+        const fetchBtn = document.getElementById('fetch-btn');
+        const statusDiv = document.getElementById('status');
+        const articlesContainer = document.getElementById('articles-container');
+
+        /**
+         * Fetches popular articles from NY Times API based on selected criteria and timeframe
+         * @param {string} criteria - The popularity criteria ('viewed', 'shared', or 'emailed')
+         * @param {string} timeframe - The time period ('1', '7', or '30' days)
+         * @returns {Promise<Object>} - A promise that resolves to the API response data
+         * @throws {Error} - If the API request fails
+         */
+        async function fetchArticles(criteria, timeframe) {
+            const url = `${API_BASE_URL}/${criteria}/${timeframe}.json?api-key=${API_KEY}`;
+            
+            try {
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching articles:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Displays articles in the UI
+         * @param {Array} articles - Array of article objects to display
+         */
+        function displayArticles(articles) {
+            articlesContainer.innerHTML = '';
+            
+            if (!articles || articles.length === 0) {
+                statusDiv.innerHTML = '<div class="error">No articles found for the selected criteria.</div>';
+                return;
+            }
+            
+            articles.forEach(article => {
+                try {
+                    const articleElement = createArticleElement(article);
+                    articlesContainer.appendChild(articleElement);
+                } catch (error) {
+                    console.error('Error creating article element:', error);
+                }
+            });
+        }
+
+        /**
+         * Creates an article DOM element from article data
+         * @param {Object} article - The article data object
+         * @returns {HTMLElement} - The created article element
+         */
+        function createArticleElement(article) {
+            // Safely extract article data with fallbacks
+            const title = article.title || 'No title available';
+            const abstract = article.abstract || 'No abstract available';
+            const url = article.url || '#';
+            const publishedDate = article.published_date ? 
+                new Date(article.published_date).toLocaleDateString() : 'Unknown date';
+            
+            // Extract image URL (handling potential missing media)
+            let imageUrl = 'https://via.placeholder.com/400x200?text=No+Image';
+            if (article.media && article.media.length > 0) {
+                const media = article.media[0];
+                if (media['media-metadata'] && media['media-metadata'].length > 0) {
+                    // Try to get medium or large image
+                    const metadata = media['media-metadata'];
+                    const mediumImage = metadata.find(img => img.format === 'mediumThreeByTwo210');
+                    const largeImage = metadata.find(img => img.format === 'mediumThreeByTwo440');
+                    
+                    if (mediumImage) imageUrl = mediumImage.url;
+                    else if (largeImage) imageUrl = largeImage.url;
+                    else if (metadata.length > 0) imageUrl = metadata[metadata.length - 1].url;
+                }
+            }
+            
+            // Create article element
+            const articleElement = document.createElement('div');
+            articleElement.className = 'article';
+            articleElement.innerHTML = `
+                <img src="${imageUrl}" alt="${title}" class="article-image"
+                     onerror="this.src='https://via.placeholder.com/400x200?text=Image+Error'">
+                <div class="article-content">
+                    <h3 class="article-title"><a href="${url}" target="_blank">${title}</a></h3>
+                    <p class="article-abstract">${abstract}</p>
+                    <p class="article-date">Published: ${publishedDate}</p>
+                </div>
+            `;
+            
+            return articleElement;
+        }
+
+        /**
+         * Handles the fetch button click event
+         */
+        async function handleFetchClick() {
+            // Get selected values
+            const criteria = criteriaSelect.value;
+            const timeframe = timeframeSelect.value;
+            
+            // Disable button and show loading
+            fetchBtn.disabled = true;
+            statusDiv.innerHTML = '<div class="loading">Loading articles...</div>';
+            articlesContainer.innerHTML = '';
+            
+            try {
+                // Fetch articles from API
+                const data = await fetchArticles(criteria, timeframe);
+                
+                // Display articles
+                displayArticles(data.results);
+                
+                // Update status
+                statusDiv.innerHTML = `<div>Loaded ${data.results.length} articles</div>`;
+            } catch (error) {
+                // Show error message
+                statusDiv.innerHTML = `<div class="error">Failed to load articles: ${error.message}</div>`;
+                console.error('Error:', error);
+            } finally {
+                // Re-enable button
+                fetchBtn.disabled = false;
+            }
+        }
+
+        // Event listeners
+        fetchBtn.addEventListener('click', handleFetchClick);
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Optionally fetch articles on page load
+            // handleFetchClick();
+        });
+    </script>
+</body>
+</html>
